@@ -53,8 +53,8 @@ void list_add_back( struct list** old, char skin, int32_t x, int32_t y ) {
     else list_last(*old)->next = node_create(skin, x, y);
 }
 
-void peresch(struct list* list, int32_t x, int32_t y) {
-	if (list->next) peresch(list->next, list->x, list->y);
+void update_snake(struct list* list, int32_t x, int32_t y) {
+	if (list->next) update_snake(list->next, list->x, list->y);
 	list->x = x;
 	list->y = y;
 }
@@ -125,6 +125,7 @@ void paint_snake(struct playing_field* map, struct list* list) {
 
 int main() {
 	char key;
+	char idx = 1;
 	int64_t score = 0;
 	int64_t pause = 50;
 	int32_t speedX = 1;
@@ -133,8 +134,7 @@ int main() {
 	printf("Enter size of playing field: ");
 	scanf("%zu", &(map.size));
 	create_field(&map);
-	// struct dog dog = {'@', 5, 5, 1, 0};
-	struct list* snake = node_create('@', 5, 5);
+	struct list* snake = node_create(97, 5, 5);
 	struct enemy enemy = {'o', 0, 0, 15};
 	generate_new_coords(&enemy, &map);
 	initscr();
@@ -146,7 +146,8 @@ int main() {
 			int32_t oldY = enemy.y;
 			generate_new_coords(&enemy, &map);
 			map.field[oldY][oldX] = ' ';
-			list_add_back(&snake, snake->skin, snake->x, snake->y );
+			list_add_back(&snake, snake->skin + idx, snake->x, snake->y );
+			idx++;
 		}
 		if (is_crash(snake, &map)) break;
 		clear_map(&map);
@@ -161,9 +162,7 @@ int main() {
 		if (key == 's') { speedY = 1; speedX = 0; pause = 100; }
 		if (key == 'a') { speedX = -1; speedY = 0; pause = 50; }
 		if (key == 'd') { speedX = 1; speedY = 0; pause = 50; }
-		peresch(snake, snake->x + speedX, snake->y + speedY);
-		//dog.x += dog.speedX;
-		//dog.y += dog.speedY;
+		update_snake(snake, snake->x + speedX, snake->y + speedY);
 		napms(pause);
 	} while (key != 'e');
 	endwin();
