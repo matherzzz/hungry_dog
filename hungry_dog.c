@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <curses.h>
 #include <inttypes.h>
+#include <string.h>
 
 struct playing_field {
 	char** field;
@@ -73,7 +74,10 @@ void fill_str(char* str, char s, size_t sz) {
 		*(str + i) = s;
 }
 
-void print_field(struct playing_field* map) {
+void print_field(int64_t score, int64_t best_score, char* name_best, struct playing_field* map) {
+	printw("score: %"PRId64" | ", score);
+	if (best_score == 0) printw("best: -\n");
+        else printw("best: %"PRId64" (%s)\n", best_score, name_best);
 	start_color();
 	init_pair(1, COLOR_RED, COLOR_BLACK);
 	init_pair(2, COLOR_CYAN, COLOR_BLACK);
@@ -138,12 +142,23 @@ void paint_snake(struct playing_field* map, struct list* list) {
 int main() {
 	char key;
 	int64_t score = 0;
+	char name[15];
+	char name_best[15]= "";
+	int64_t best_score = 0;
 	int64_t pause = 50;
 	int32_t speedX = 1;
 	int32_t speedY = 0;
-	struct playing_field map = {0};
-	printf("Enter size of playing field: ");
-	scanf("%zu", &(map.size));
+	FILE *fp;
+	struct playing_field map = {NULL, 20};
+	printf("Enter your name: ");
+	fgets(name, 15, stdin);
+	fp = fopen("best_score.txt", "a+");
+	fscanf(fp, "%"PRId64" ", &best_score);
+	fgets(name_best, 15, fp);
+	fclose(fp);
+	if (name[strlen(name_best) - 1] == '\n') name[strlen(name_best) - 1] = '\0';
+	if (name[strlen(name) - 1] == '\n') name[strlen(name) - 1] = '\0';
+	fp = fopen("best_score.txt", "w");
 	create_field(&map);
 	struct list* snake = node_create('>', 5, 5);
 	struct enemy enemy = {'*', 0, 0, 15};
@@ -153,6 +168,7 @@ int main() {
 		clear();
 		if (is_eat(&enemy, snake)) {
 			score += enemy.cost;
+			if (score > best_score) { best_score = score; strcpy(name_best, name); }
 			int32_t oldX = enemy.x;
 			int32_t oldY = enemy.y;
 			generate_new_coords(&enemy, &map);
@@ -163,8 +179,7 @@ int main() {
 		clear_map(&map);
 		paint_snake(&map, snake);
 		map.field[enemy.y][enemy.x] = enemy.skin;
-		printw("score: %"PRId64"\n", score);
-		print_field(&map);
+		print_field(score, best_score, name_best, &map);
 		printw("Press 'e' to stop the game ");
 		timeout(0);
 		key = getch();
@@ -176,10 +191,10 @@ int main() {
 		update_snake(snake, snake->x + speedX, snake->y + speedY);
 		napms(pause);
 	} while (key != 'e');
+	fprintf(fp, "%"PRId64" %s", best_score, name_best);
 	timeout(-1);
 	clear();
-	printw("score: %"PRId64"\n", score);
-	print_field(&map);
+	print_field(score, best_score, name_best, &map);
 	if (key == 'e') printw("YOU HAVE FINISHED THE GAME\n");
 	else printw("GAME OVER\n");
 	printw("Press 'e' to exit the terminal");
@@ -189,6 +204,7 @@ int main() {
 	endwin();
 	list_destroy(snake);
 	free_field(&map);
+	fclose(fp);
 	return 0;
 }
 
