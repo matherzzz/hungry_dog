@@ -3,6 +3,7 @@
 #include <curses.h>
 #include <inttypes.h>
 #include <string.h>
+#include <time.h>
 
 struct playing_field {
 	char** field;
@@ -67,6 +68,16 @@ struct enemy {
 	int64_t cost;
 };
 
+struct bonus_enemy {
+	char skin;
+	int32_t x;
+	int32_t y;
+	int64_t cost;
+	int16_t current_time;
+	int16_t death_time;
+	bool is_alive;
+};
+
 void fill_str(char* str, char s, size_t sz) {
 	*str = '#';
 	*(str + sz - 1) = '#';
@@ -82,12 +93,14 @@ void print_field(int64_t score, int64_t best_score, char* name_best, struct play
 	init_pair(1, COLOR_RED, COLOR_BLACK);
 	init_pair(2, COLOR_CYAN, COLOR_BLACK);
 	init_pair(3, COLOR_GREEN, COLOR_BLACK);
+	init_pair(4, COLOR_YELLOW, COLOR_BLACK);
 	attron(COLOR_PAIR(2));
 	int8_t color;
 	for (size_t i = 0; i < map->size; i++) {
 		for (size_t j = 0; j < map->size * 2; j++) {
 			if ((map->field)[i][j] == '#') color = 2;
 			else if((map->field)[i][j] == '*') color = 1;
+			else if((map->field)[i][j] == '$') color = 4;
 			else color = 3;
 			attron(COLOR_PAIR(color));
 			printw("%c", (map->field)[i][j]);
@@ -124,8 +137,21 @@ void generate_new_coords(struct enemy* enemy, const struct playing_field* const 
 	} while ((map->field)[enemy->y][enemy->x] != ' ');
 }
 
+void generate_new_coords_bonus(struct bonus_enemy* bonus, const struct playing_field* const map) {
+	do {
+		bonus->x = 1 + rand()%(2 * map->size - 2);
+		bonus->y = 1 + rand()%(map->size - 2);
+	} while ((map->field)[bonus->y][bonus->x] != ' ');
+}
+
+
 bool is_eat(struct enemy* enemy, struct list* list) {
 	return enemy->x == list->x && enemy->y == list->y;
+}
+
+bool is_eat_bonus(struct bonus_enemy* bonus, struct list* list) {
+	if (bonus->is_alive) return bonus->x == list->x && bonus->y == list->y;
+	else return false;
 }
 
 bool is_crash(struct list* list, struct playing_field* map) {
@@ -140,14 +166,17 @@ void paint_snake(struct playing_field* map, struct list* list) {
 }
 
 int main() {
+	srand(time(NULL));
 	char key;
 	int64_t score = 0;
 	char name[15];
-	char name_best[15]= "";
+	char name_best[15];
 	int64_t best_score = 0;
 	int64_t pause = 50;
 	int32_t speedX = 1;
 	int32_t speedY = 0;
+	int64_t bonus_score = -1;
+	bool is_buff = true;
 	FILE *fp;
 	struct playing_field map = {NULL, 20};
 	printf("Enter your name: ");
@@ -162,7 +191,9 @@ int main() {
 	create_field(&map);
 	struct list* snake = node_create('>', 5, 5);
 	struct enemy enemy = {'*', 0, 0, 15};
+	struct bonus_enemy bonus = {'$', 0, 0, 30, 0, 6000, false};
 	generate_new_coords(&enemy, &map);
+	generate_new_coords_bonus(&bonus, &map);
 	initscr();
 	do {
 		clear();
@@ -175,10 +206,35 @@ int main() {
 			map.field[oldY][oldX] = ' ';
 			list_add_back(&snake, 'o', snake->x, snake->y );
 		}
+		if (is_eat_bonus(&bonus, snake)) {
+			score += bonus.cost;
+			if (score > best_score) { best_score = score; strcpy(name_best, name); }
+			map.field[bonus.y][bonus.x] = ' ';
+			list_add_back(&snake, 'o', snake->x, snake->y );
+			bonus_score = -1;
+			bonus.current_time = 0;
+			bonus.is_alive = false;
+		}
 		if (is_crash(snake, &map)) break;
+		if (score % 120 == 0 && bonus_score == -1) {
+			while (bonus_score % enemy.cost != 0)
+				bonus_score = score + rand() % 120;
+		}
+		if (score == bonus_score) bonus.is_alive = true;
 		clear_map(&map);
 		paint_snake(&map, snake);
 		map.field[enemy.y][enemy.x] = enemy.skin;
+		if (bonus.is_alive) {
+			map.field[bonus.y][bonus.x] = bonus.skin;
+			bonus.current_time += pause;
+			if (bonus.current_time == bonus.death_time) {
+				bonus.current_time = 0;
+				bonus.is_alive = false;
+				bonus_score = -1;
+			}
+		} else {
+			generate_new_coords_bonus(&bonus, &map);
+		}
 		print_field(score, best_score, name_best, &map);
 		printw("Press 'e' to stop the game ");
 		timeout(0);
@@ -192,6 +248,7 @@ int main() {
 		napms(pause);
 	} while (key != 'e');
 	fprintf(fp, "%"PRId64" %s", best_score, name_best);
+	fclose(fp);
 	timeout(-1);
 	clear();
 	print_field(score, best_score, name_best, &map);
@@ -204,7 +261,6 @@ int main() {
 	endwin();
 	list_destroy(snake);
 	free_field(&map);
-	fclose(fp);
 	return 0;
 }
 
